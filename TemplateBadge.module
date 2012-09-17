@@ -1,0 +1,209 @@
+<?php
+
+/**
+ * ProcessWire Template Badges
+ *
+ * @version 1.0.0-beta1
+ * @author Rasmus Schultz
+ * @website http://blog.mindplay.dk/
+ * @license GPL v3
+ *
+ * This module allows you to add a colorful badge and/or select an icon to
+ * display on the page-list for a given template.
+ *
+ * NOTES:
+ *
+ * - ProcessTemplate::buildEditForm is not hookable in the current PW release -
+ *   it must be renamed to ProcessTemplate::___buildEditForm for this module to work.
+ *
+ * - The latest version of jQuery is required - this is not available in the current
+ *   PW release, please replace "wire/modules/Jquery/JqueryCore/JqueryCore.js"
+ */
+
+class TemplateBadge extends WireData implements Module
+{
+  /**
+   * getModuleInfo is a module required by all modules to tell ProcessWire about them
+   *
+   * @return array
+   */
+  public static function getModuleInfo() {
+
+    return array(
+      'title' => 'Template Badges',
+      'version' => 100,
+      'summary' => 'Optionally add colorful badges and icons to Templates - this can improve the sitemap view, when you have many different Templates installed.',
+      'href' => '',
+      'singular' => true,
+      'autoload' => true,
+    );
+  }
+
+  public function init() {
+    // hooks into template form:
+    $this->addHookAfter('ProcessTemplate::buildEditForm', $this, 'hookAddForm');
+    $this->addHookBefore('ProcessTemplate::executeSave', $this, 'hookSaveForm');
+
+    // hooks into the page-list:
+    $this->addHookBefore('ProcessPageList::execute', $this, 'hookPageList');
+    $this->addHookAfter('ProcessPageListRender::getPageLabel', $this, 'hookPageLabel');
+  }
+
+  public function hookAddForm(HookEvent $event) {
+    /**
+     * @var $form InputfieldForm
+     * @var $label InputfieldText
+     * @var $color InputfieldText
+     * @var $icon InputfieldSelect
+     */
+
+    $form = $event->return;
+
+    $template = $this->templates->get($event->arguments('template'));
+
+    $t = new InputfieldWrapper();
+
+    $t->attr('title', $this->_x('Badge', 'tab'));
+    $t->head = $this->_('Display a badge/icon in the page list');
+    $t->attr('class', 'WireTab');
+
+    $label = $this->modules->get('InputfieldText');
+    $label->label = $this->_('Badge Label');
+    $label->attr('id+name', 'badge_label');
+    $label->attr('value', $template->badge_label);
+    $label->columnWidth = 50;
+
+    $color = $this->modules->get('InputfieldText');
+    $color->label = $this->_('Badge Color');
+    $color->attr('id+name', 'badge_color');
+    $color->attr('value', $template->badge_color);
+    $color->columnWidth = 50;
+
+    $icons = $this->getIcons();
+    $icons_url = $this->getIconUrl();
+    $icons_license = $this->config->paths->TemplateBadge.'icons/LICENSE.txt';
+
+    $icon = $this->modules->get('InputfieldSelect');
+    $icon->label = $this->_('Page Icon');
+    $icon->addOption('');
+    $icon->attr('id+name', 'badge_icon');
+    $icon->attr('value', $template->badge_icon);
+    $icon->addOptions($icons);
+
+    $icon->addHookAfter('render', null, function(HookEvent $event) use($icons, $icons_url, $icons_license) {
+      $event->return .= '<div id="template-badge-icons">';
+
+      foreach ($icons as $icon => $name) {
+        $event->return .= '<img title="'.htmlspecialchars($name).'" src="'.$icons_url.$icon.'" data-icon="'.$icon.'" />';
+      }
+
+      $event->return .= '</div>';
+
+      if (file_exists($icons_license)) {
+        $event->return .= file_get_contents($icons_license);
+      }
+    });
+
+    $t->add($label);
+    $t->add($color);
+    $t->add($icon);
+
+    $t->addHookAfter('render', $this, 'hookAfterRender');
+
+    $form->add($t);
+  }
+
+  private function addCss()
+  {
+    $this->config->styles->add($this->config->urls->TemplateBadge . "TemplateBadge.css");
+  }
+
+  /**
+   * @return array list of icons, where $filename => $display_name
+   */
+  private function getIcons()
+  {
+    static $icons;
+
+    if (!isset($icons)) {
+      $icons = array();
+      foreach (glob($this->config->paths->TemplateBadge.'icons/*.png') as $icon) {
+        $filename = basename($icon);
+        $name = ucwords(strtr(basename($filename,'.png'), '-_', '  '));
+        $icons[$filename] = $name;
+      }
+    }
+
+    return $icons;
+  }
+
+  /**
+   * @return string base URL for page icons
+   */
+  private function getIconUrl()
+  {
+    return $this->config->urls->TemplateBadge.'icons/';
+  }
+
+
+  public function hookAfterRender(HookEvent $event)
+  {
+    $this->config->scripts->add($this->config->urls->TemplateBadge . "TemplateBadge.js");
+    $this->addCss();
+
+    $event->return .= '<script> $(document).ready(function() { TemplateBadges.init(); }); </script>';
+  }
+
+  public function hookSaveForm($event) {
+    $label = isset($this->input->post->badge_label) ? $this->input->post->badge_label : null;
+    $color = isset($this->input->post->badge_color) ? $this->input->post->badge_color : null;
+    $icon = isset($this->input->post->badge_icon) ? $this->input->post->badge_icon : null;
+
+    $template = $this->templates->get($this->input->post->id);
+
+    if ($template->badge_label != $label || $template->badge_color != $color || $template->badge_icon != $icon) {
+      $this->message($this->_("Changed Template Badge"));
+    }
+
+    $template->badge_label = $label;
+    $template->badge_color = $color;
+    $template->badge_icon = $icon;
+  }
+
+  public function hookPageList(HookEvent $event)
+  {
+    $this->addCss();
+  }
+
+  public function hookPageLabel(HookEvent $event)
+  {
+    /**
+     * @var Page $page
+     * @var Template $template
+     */
+
+    $page = $event->argumentsByName('page');
+
+    $template = $page->template;
+
+    if (isset($template->badge_icon)) {
+      $url = $this->getIconUrl().$template->badge_icon;
+
+      $event->return = '<img class="template-badge-icon" src="'.$url.'" />'.$event->return;
+    }
+
+    if (isset($template->badge_color)) {
+      $color = $template->badge_color;
+
+      if (isset($template->badge_label)) {
+        $label = $template->badge_label;
+      } else if (isset($template->label)) {
+        $label = $template->label;
+      } else {
+        $label = $template->name;
+      }
+
+      $event->return .= '<span class="template-badge" style="background:'.$color.'">'.$label.'</span>';
+    }
+  }
+}
