@@ -11,20 +11,24 @@
         $input = $(this);
 
         if (!$input.data(NAME)) {
-            $input.data(NAME, true).css('display', 'none');
+            //$input.data(NAME, true).css('display', 'none');
 
             $div = $input.wrap('<div/>').parent().addClass(NAME);
 
             var colors = ($input.attr('data-colors') || COLORS).split(',');
 
-            function _select($span) {
+            var _select = function($span) {
                 $div.find('i').html('');
                 $span.find('i').html(CHECKMARK);
+
                 $input.val($span.data('color'));
-            }
+            };
 
             $.each(colors, function(i,c) {
-                var $span = $('<span><i style="background:'+c+'"></i></span>');
+                var $span = $('<span><i style="background:'+c+'"></i></span>')
+                    .bind('click', function(e) {
+                        _select($(this));
+                    });
                 $span.data('color', c);
                 if (c == $input.val()) {
                     _select($span);
@@ -32,25 +36,29 @@
                 $div.append($span);
             });
 
-            $div.append($('<span><i style="background:white"></i></span>').data('color',''));
+            $div.append($('<span><i style="background:white"></i></span>').bind('click', function(e) {
+                        _select($(this));
+                    }).data('color',''));
 
             $div.append('<br style="clear:both"/>'); // clearfix
 
-            $div.on('click', 'span', function(e) {
-                _select($(this));
-            });
+            // $div.live('click', function(e) {
+            //     _select($(e.target));
+            // });
         }
 
         return this;
     };
+
 })(jQuery);
 
+$(document).ready(function(){TemplateBadges.init();});
 TemplateBadges = {
     init: function() {
         $('#badge_color').presetpicker();
 
-        $('#template-badge-icons').on('click', 'img', function() {
-            $('#badge_icon').val($(this).attr('data-icon'));
+        $('#template-badge-icons').bind('click', function(e) {
+            $('#badge_icon').val($(e.target).attr('data-icon'));
         });
     }
 };
