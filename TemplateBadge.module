@@ -90,25 +90,24 @@ class TemplateBadge extends WireData implements Module
     $icon->attr('value', $template->badge_icon);
     $icon->addOptions($icons);
 
-    $icon->addHookAfter('render', null, function(HookEvent $event) use($icons, $icons_url, $icons_license) {
-      $event->return .= '<div id="template-badge-icons">';
+    $markup = $this->modules->get('InputfieldMarkup');
+    $markup->value = '<div id="template-badge-icons">';
+    foreach ($icons as $_icon => $name) {
+      $markup->value .= '<img title="'.htmlspecialchars($name).'" src="'.$icons_url.$_icon.'" data-icon="'.$_icon.'" />';
+    }
+    $markup->value .= '</div>';
+    if (file_exists($icons_license)) {
+      $markup->value .= file_get_contents($icons_license);
+    }
 
-      foreach ($icons as $icon => $name) {
-        $event->return .= '<img title="'.htmlspecialchars($name).'" src="'.$icons_url.$icon.'" data-icon="'.$icon.'" />';
-      }
-
-      $event->return .= '</div>';
-
-      if (file_exists($icons_license)) {
-        $event->return .= file_get_contents($icons_license);
-      }
-    });
+    //$markup->value .= "<script> $(document).ready(function() { TemplateBadges.init(); }); </script>";
 
     $t->add($label);
     $t->add($color);
     $t->add($icon);
+    $t->add($markup);
 
-    $t->addHookAfter('render', $this, 'hookAfterRender');
+    $this->addScripts();
 
     $form->add($t);
   }
@@ -146,12 +145,12 @@ class TemplateBadge extends WireData implements Module
   }
 
 
-  public function hookAfterRender(HookEvent $event)
+  public function addScripts()
   {
     $this->config->scripts->add($this->config->urls->TemplateBadge . "TemplateBadge.js");
     $this->addCss();
-
-    $event->return .= '<script> $(document).ready(function() { TemplateBadges.init(); }); </script>';
+    // moved to TemplateBadge.js ready
+    //$event->return .= '<script> $(document).ready(function() { TemplateBadges.init(); }); </script>';
   }
 
   public function hookSaveForm($event) {
